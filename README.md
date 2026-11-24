@@ -52,4 +52,8 @@
 - **一篇能随着阅读改进的概念笔记。** 第二本书也讲“共享内存”时，agent 会在已有解释上补充例子和适用条件，保留各书出处。你手写过的段落遇到更新冲突时，会留给你审阅。
 - **你自己讲通的那句话。** 只有你同意保存的原话才会写入。以后翻回来，能看到当时让你想通的解释，也能点回它对应的材料。
 
+## 欢迎反馈与建议
+
+欢迎每一位使用者分享意见和建议！哪一段讲解帮你读懂了书，哪一步用起来不顺手，或者你希望导师换一种方式教你，都可以告诉我们。[在 GitHub Issues 留下反馈](https://github.com/PythonSouls/Book_to_Consultant/issues/new)
+
 [技能入口](book-to-tutor/SKILL.md) · [整书导入与多书融合](book-to-tutor/references/import.md) · [教学与动画](book-to-tutor/references/teach.md) · [MIT 许可证](LICENSE)
