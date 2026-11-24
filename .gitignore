@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.DS_Store
+Thumbs.db
+debug.log
+
+# Local source material, Obsidian data and practice vaults
+*.pdf
+*.epub
+.obsidian/
+.trash/
+/vault/
+/work/

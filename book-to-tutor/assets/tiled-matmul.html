@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>分块矩阵乘法 · 两次同步在等什么？</title>
+  <style>
+    :root {
+      color-scheme: light; --ink: #122f3b; --muted: #49616a; --line: #c4d1d1;
+      --a: #bfe7df; --a-ink: #07544c; --b: #f8d9af; --b-ink: #70410d;
+      --paper: #f4f6f1; --focus: #126b80; --reg: #dce8f7;
+      font-family: "Atkinson Hyperlegible Next", "Microsoft YaHei", "PingFang SC", sans-serif;
+      color: var(--ink); background: var(--paper);
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; }
+    main { max-width: 1150px; margin: auto; padding: clamp(18px, 4vw, 52px); }
+    header { margin-bottom: 22px; }
+    h1, h2, h3, p, figure { margin: 0; }
+    h1 { font-size: clamp(1.6rem, 3.5vw, 2.65rem); letter-spacing: -.035em; line-height: 1.25; }
+    header p, footer { margin-top: .65rem; color: var(--muted); line-height: 1.65; }
+    #narrative { padding: 19px 23px; border-radius: 12px; background: var(--ink); color: #fff; }
+    #narrative h2 { font-size: clamp(1.1rem, 2.5vw, 1.5rem); margin: 4px 0; }
+    #narrative p { line-height: 1.65; }
+    #position { display: block; color: #bbddd8; font-size: .85rem; font-weight: 600; }
+    .diagram { margin: 15px 0; display: grid; grid-template-columns: 1.12fr 1fr 1fr; gap: 10px; }
+    .lane { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: clamp(11px, 1.5vw, 20px); }
+    .lane h3 { font-size: 1rem; }
+    .figures { display: flex; align-items: start; justify-content: space-around; gap: 9px; margin: 12px 0; }
+    figcaption { font-size: .88rem; font-weight: 650; margin-bottom: 6px; text-align: center; }
+    .matrix { display: grid; grid-template-columns: repeat(var(--n), minmax(0, 1fr)); gap: 2px; }
+    .cell { display: grid; place-items: center; width: clamp(20px, 2.2vw, 27px); aspect-ratio: 1; border-radius: 3px; border: 1px solid #d1dbd8; background: #f2f4f1; color: #53676d; font: 600 .85rem/1 Consolas, monospace; }
+    .matrix.small .cell { width: clamp(28px, 3.25vw, 38px); font-size: 1rem; }
+    .cell.tile-a, .ghost.tile-a { color: var(--a-ink); background: var(--a); border-color: #72b6a7; }
+    .cell.tile-b, .ghost.tile-b { color: var(--b-ink); background: var(--b); border-color: #dca65c; }
+    .cell.register, .cell.written, .ghost.register { background: var(--reg); color: #20476d; border-color: #a7bdd4; }
+    .cell.chosen { outline: 2px solid var(--ink); outline-offset: -2px; }
+    .caption { color: var(--muted); font-size: .83rem; line-height: 1.5; }
+    .inspection { display: flex; align-items: center; gap: .65rem 1.2rem; flex-wrap: wrap; background: #e7eeea; padding: 14px 16px; border-radius: 9px; }
+    .inspection label { font-weight: 650; font-size: .9rem; }
+    .inspection select { color: var(--ink); font: inherit; padding: 4px; background: #fff; border: 1px solid #a7b9b5; border-radius: 4px; }
+    #calculation { font-size: .93rem; line-height: 1.5; }
+    .transport { margin: 18px 0; }
+    .range-label { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .85rem; }
+    input[type=range] { accent-color: var(--focus); flex: 1; min-width: 60px; }
+    .buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+    button { font: inherit; cursor: pointer; padding: 8px 14px; border: 1px solid #aebfbd; border-radius: 6px; color: var(--ink); background: #fff; }
+    button.primary { color: #fff; background: var(--ink); border-color: var(--ink); }
+    button:disabled { cursor: default; opacity: .45; }
+    :focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+    .ghost { pointer-events: none; position: fixed; z-index: 5; display: grid; place-items: center; font: bold .87rem Consolas, monospace; border: 1px solid; border-radius: 4px; }
+    footer { border-top: 1px solid var(--line); padding-top: 12px; font-size: .81rem; }
+    @media (max-width: 870px) {
+      .diagram { grid-template-columns: 1fr 1fr; }
+      .lane:first-child { grid-column: 1 / -1; }
+      .lane:first-child .figures { justify-content: flex-start; gap: 30px; }
+    }
+    @media (max-width: 530px) {
+      .diagram { grid-template-columns: 1fr; }
+      .lane .figures { justify-content: flex-start; gap: 25px; }
+      #narrative { padding: 15px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>分块矩阵乘法：两次同步在等什么？</h1>
+    <p>用一个 2 × 2 线程块计算 C 的左上角。每个线程负责一个输出元素，两轮计算共用同一对共享内存分块。</p>
+  </header>
+  <section id="narrative" aria-labelledby="step-title">
+    <span id="position"></span>
+    <h2 id="step-title"></h2>
+    <p id="explanation"></p>
+  </section>
+  <section class="diagram" aria-label="数据流与各存储区的当前状态">
+    <section class="lane">
+      <h3>全局内存 · 输入</h3>
+      <div class="figures">
+        <figure><figcaption>A</figcaption><div class="matrix" id="input-a" aria-label="矩阵 A"></div></figure>
+        <figure><figcaption>B</figcaption><div class="matrix" id="input-b" aria-label="矩阵 B"></div></figure>
+      </div>
+      <p class="caption">着色的 2 × 2 区域是本轮要读取的分块。</p>
+    </section>
+    <section class="lane">
+      <h3>共享内存 · 块内复用</h3>
+      <div class="figures">
+        <figure><figcaption>A 分块</figcaption><div class="matrix small" id="shared-a" aria-label="A 的共享内存分块"></div></figure>
+        <figure><figcaption>B 分块</figcaption><div class="matrix small" id="shared-b" aria-label="B 的共享内存分块"></div></figure>
+      </div>
+      <p class="caption">乘加时，深框标出所选线程读取的两个值。</p>
+    </section>
+    <section class="lane">
+      <h3>累加与写回</h3>
+      <div class="figures">
+        <figure><figcaption>各线程的累加值</figcaption><div class="matrix small" id="acc" aria-label="线程累加值"></div></figure>
+        <figure><figcaption>C 左上角</figcaption><div class="matrix small" id="output" aria-label="输出 C 的左上角"></div></figure>
+      </div>
+      <p class="caption">左边每格对应一个线程的私有累加值。右边显示本线程块写回的结果。</p>
+    </section>
+  </section>
+  <section class="inspection" aria-label="单个线程的算式">
+    <label for="thread">观察线程</label>
+    <select id="thread">
+      <option value="0">行 0，列 0</option><option value="1">行 0，列 1</option>
+      <option value="2">行 1，列 0</option><option value="3">行 1，列 1</option>
+    </select>
+    <p id="calculation"></p>
+  </section>
+  <section class="transport" aria-label="演示控制">
+    <label class="range-label" for="timeline">演示进度<input id="timeline" type="range" min="0" step="1" value="0"></label>
+    <div class="buttons">
+      <button type="button" class="primary" id="play">播放完整演示</button>
+      <button type="button" id="back">上一步</button>
+      <button type="button" id="next">下一步</button>
+      <button type="button" id="restart">回到开头</button>
+    </div>
+  </section>
+  <footer>自拟算例与示意图。教材关联：《Programming Massively Parallel Processors》第 4 版，第 5 章 §5.3–5.4，图 5.7–5.9。矩阵下标从 0 开始。</footer>
+</main>
+<script>
+  'use strict';
+  const A = [[1, 2, 3, 4], [2, 1, 0, 3], [0, 3, 1, 2], [4, 0, 2, 1]];
+  const B = [[2, 1, 3, 0], [1, 2, 0, 1], [0, 3, 2, 1], [2, 0, 1, 2]];
+  const tile = 2;
+  const frames = [{kind: 'start', title: '一个线程负责 C 的一个元素', text: '要得到左上角的四个结果，每个线程都需要四对乘数。先把私有累加值清零，再分两轮取数。'}];
+  for (let phase = 0; phase < 2; phase++) {
+    const start = phase * tile;
+    frames.push(
+      {phase, kind: 'load', title: '协作装入本轮分块', text: `四个线程各搬一个 A 元素和一个 B 元素。本轮取 A 的第 ${start}、${start + 1} 列，以及 B 的第 ${start}、${start + 1} 行，放进同一线程块的共享内存。`},
+      {phase, kind: 'ready', title: '第一次同步：等全块装入数据', text: '线程接下来会读取其他线程搬来的数。所有线程都到达这里后，再开始使用完整的分块。'},
+      {phase, kind: 'mac', k: start, title: `乘加：使用内积的第 ${start + 1} 对数`, text: '每个线程从共享内存中取出自己所需的一对数，将乘积加进自己的累加值。切换观察线程，可以跟踪另一个输出元素。'},
+      {phase, kind: 'mac', k: start + 1, title: `乘加：使用内积的第 ${start + 2} 对数`, text: '线程沿 A 分块的一行、B 分块的一列移动。相邻线程可以重复使用已装入共享内存的数。'},
+      {phase, kind: 'used', title: '第二次同步：等全块用完旧数据', text: phase === 0 ? '下一轮将覆盖同一块共享内存。实际线程块若含多个 warp，一个 warp 可能先算完；此处同步，等其余线程读完旧数据再覆盖。' : '这里保留循环末尾的同步。此轮之后将直接写回结果，已经没有下一轮装载会覆盖这对分块。'}
+    );
+  }
+  frames.push({kind: 'store', title: '把四个累加值写入 C', text: '两轮共完成四次乘加。每个线程把自己的累加值写回全局内存中的一个输出位置。其他线程块可以用相同方式计算 C 的其他区域。'});
+
+  const $ = id => document.getElementById(id);
+  const grids = {};
+  let index = 0;
+  let timer = null;
+  let flights = [];
+
+  function makeGrid(id, size) {
+    const grid = $(id);
+    grid.style.setProperty('--n', size);
+    grid.setAttribute('role', 'table');
+    grids[id] = Array.from({length: size}, (_, row) => {
+      const group = document.createElement('div');
+      group.setAttribute('role', 'row');
+      group.style.display = 'contents';
+      grid.append(group);
+      return Array.from({length: size}, (_, col) => {
+        const cell = document.createElement('span');
+        cell.setAttribute('role', 'cell');
+        group.append(cell);
+        return cell;
+      });
+    });
+  }
+  ['input-a', 'input-b'].forEach(id => makeGrid(id, 4));
+  ['shared-a', 'shared-b', 'acc', 'output'].forEach(id => makeGrid(id, tile));
+
+  function paint(id, row, col, value, style = '') {
+    const cell = grids[id][row][col];
+    cell.className = 'cell ' + style;
+    cell.textContent = value;
+    cell.setAttribute('aria-label', `行 ${row}，列 ${col}：${value === '·' ? '尚无本例数据' : value}`);
+  }
+  function dot(row, col, count) {
+    let total = 0;
+    for (let k = 0; k < count; k++) total += A[row][k] * B[k][col];
+    return total;
+  }
+  function moveValue(source, destination, color, delay) {
+    const from = source.getBoundingClientRect(), to = destination.getBoundingClientRect();
+    const chip = document.createElement('span');
+    chip.className = 'ghost ' + color;
+    chip.textContent = source.textContent;
+    chip.setAttribute('aria-hidden', 'true');
+    Object.assign(chip.style, {left: `${from.left}px`, top: `${from.top}px`, width: `${from.width}px`, height: `${from.height}px`});
+    document.body.append(chip);
+    const motion = chip.animate([{transform: 'translate(0,0)', opacity: 1}, {transform: `translate(${to.left - from.left}px,${to.top - from.top}px)`, opacity: .25}], {duration: 650, delay, easing: 'ease-in-out', fill: 'both'});
+    motion.onfinish = motion.oncancel = () => chip.remove();
+    flights.push(motion);
+  }
+  function render(animate = false) {
+    flights.forEach(motion => motion.cancel());
+    flights = [];
+    const frame = frames[index];
+    const column = Number($('thread').value) % tile, row = Math.floor(Number($('thread').value) / tile);
+    const active = frame.phase !== undefined, offset = (frame.phase || 0) * tile;
+    const mac = frame.kind === 'mac', stored = frame.kind === 'store';
+    const count = frames.slice(0, index + 1).filter(item => item.kind === 'mac').length;
+    const canAnimate = animate && typeof Element.prototype.animate === 'function' && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $('position').textContent = `第 ${index + 1} / ${frames.length} 步${active ? '　·　第 ' + (frame.phase + 1) + ' 轮' : ''}`;
+    $('step-title').textContent = frame.title;
+    $('explanation').textContent = frame.text;
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        paint('input-a', i, j, A[i][j], active && i < tile && j >= offset && j < offset + tile ? 'tile-a' : '');
+        paint('input-b', i, j, B[i][j], active && i >= offset && i < offset + tile && j < tile ? 'tile-b' : '');
+      }
+    }
+    const sharedOffset = stored ? tile : offset;
+    for (let i = 0; i < tile; i++) {
+      for (let j = 0; j < tile; j++) {
+        const chosen = i === row && j === column ? ' chosen' : '';
+        const hasData = frame.kind !== 'start';
+        const aUsed = mac && i === row && j === frame.k % tile;
+        const bUsed = mac && i === frame.k % tile && j === column;
+        paint('shared-a', i, j, hasData ? A[i][sharedOffset + j] : '·', (hasData ? 'tile-a' : '') + (aUsed ? ' chosen' : ''));
+        paint('shared-b', i, j, hasData ? B[sharedOffset + i][j] : '·', (hasData ? 'tile-b' : '') + (bUsed ? ' chosen' : ''));
+        const sum = dot(i, j, count);
+        paint('acc', i, j, sum, 'register' + chosen);
+        paint('output', i, j, stored ? sum : '·', stored ? 'written' + chosen : '');
+        if (canAnimate && frame.kind === 'load') {
+          moveValue(grids['input-a'][i][offset + j], grids['shared-a'][i][j], 'tile-a', (i * tile + j) * 70);
+          moveValue(grids['input-b'][offset + i][j], grids['shared-b'][i][j], 'tile-b', (i * tile + j) * 70 + 70);
+        }
+        if (canAnimate && stored) moveValue(grids.acc[i][j], grids.output[i][j], 'register', (i * tile + j) * 70);
+      }
+    }
+    const place = `C[${row},${column}]`;
+    if (mac) {
+      const k = frame.k;
+      $('calculation').textContent = `${place} 的累加值：${dot(row, column, k)} + ${A[row][k]} × ${B[k][column]} = ${dot(row, column, k + 1)}`;
+    } else if (stored) {
+      const terms = A[row].map((value, k) => `${value} × ${B[k][column]}`);
+      $('calculation').textContent = `${place} = ${terms.join(' + ')} = ${dot(row, column, 4)}`;
+    } else {
+      $('calculation').textContent = `此线程负责 ${place}，当前累加值为 ${dot(row, column, count)}。`;
+    }
+    $('timeline').value = index;
+    $('timeline').setAttribute('aria-valuetext', $('position').textContent + '，' + frame.title);
+    $('back').disabled = index === 0;
+    $('next').disabled = stored;
+    $('play').textContent = timer !== null ? '暂停' : stored ? '重新播放' : index === 0 ? '播放完整演示' : '继续播放';
+  }
+  function pause() {
+    clearTimeout(timer);
+    timer = null;
+  }
+  function schedule() {
+    timer = setTimeout(() => {
+      index++;
+      if (index === frames.length - 1) pause();
+      else schedule();
+      render(true);
+    }, 3800);
+  }
+  function seek(target) {
+    pause();
+    const forward = target === index + 1;
+    index = Math.max(0, Math.min(frames.length - 1, target));
+    render(forward);
+  }
+  $('play').addEventListener('click', () => {
+    if (timer !== null) pause();
+    else {
+      if (index === frames.length - 1) index = 0;
+      schedule();
+    }
+    render();
+  });
+  $('back').addEventListener('click', () => seek(index - 1));
+  $('next').addEventListener('click', () => seek(index + 1));
+  $('restart').addEventListener('click', () => seek(0));
+  $('timeline').max = frames.length - 1;
+  $('timeline').addEventListener('input', event => seek(Number(event.target.value)));
+  $('thread').addEventListener('change', () => render());
+  render();
+</script>
+</body>
+</html>
