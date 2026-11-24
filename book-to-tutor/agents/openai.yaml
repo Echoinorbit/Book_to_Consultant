@@ -1,4 +1,4 @@
 interface:
-  display_name: "Book to Tutor · 读书导师"
+  display_name: "Book to Consultant · 私人学习顾问"
   short_description: "将整本 PDF 读成 Obsidian 中文学习笔记，结合原文、动画与回讲答疑"
   default_prompt: "用 $book-to-tutor 把这本 PDF 整本读入我的 Obsidian 库，之后根据书里的内容教我。"

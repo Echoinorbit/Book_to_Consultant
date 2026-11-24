@@ -3,7 +3,7 @@ name: book-to-tutor
 description: 将整本 PDF 教材读成 Obsidian 中可追溯的中文学习笔记，融合多书概念，并在读者提问或主动回讲时，结合原文、图解和本地动画教学。适用于导入教材、续读、查书及基于已有书库的学习。
 ---
 
-# Book to Tutor
+# Book to Consultant
 
 ## 找到读者的库
 

@@ -1,6 +1,24 @@
-# Book to Tutor · 读书导师
+# Book to Consultant · 您的轻量级私人学习顾问
 
 把一本技术教材交给 agent，它会逐节读完整本 PDF，在你的 Obsidian 库里写下带出处的中文笔记。之后你可以直接从第五章问起，点回作者的图和代码，也可以说一句 **“我来讲讲”**，让导师听你把原理讲明白。
+
+## 让 Codex 帮你安装
+
+把下面这段话直接发给能访问本地文件的 Codex：
+
+```text
+请帮我安装 https://github.com/PythonSouls/Book_to_Consultant 中的 book-to-tutor skill。
+把 book-to-tutor 子目录完整安装到我的个人技能目录，用运行这个 skill 的 Python 安装其中 requirements.txt 的依赖。
+完成后，请确认 Codex 能找到 SKILL.md、Python 能导入 pymupdf，并告诉我怎样开始读第一本书。
+```
+
+装好后，在聊天里附上自己的教材 PDF，发送：
+
+```text
+用 $book-to-tutor 把这本书完整读入我的 Obsidian 库。完成后给我能直接点开的全书入口。
+```
+
+第一次使用时，导师会问你的 Obsidian 库文件夹在哪里。默认用中文讲解，保留英文术语、公式和代码原名。
 
 ## 一次真实的读书问题
 
@@ -20,38 +38,13 @@
 
 回讲由你发起。导师先听完，再挑一个条件变化追问。哪句话值得留在图 5.9 的笔记旁边，也由你决定。
 
-## 开始读第一本书
-
-准备一个 Obsidian 库、能读写本地文件并运行 Python 的 agent，以及 Python 3.9 或更新版本。在 agent 使用的 Python 环境中安装 PDF 读取依赖：
-
-```sh
-git clone https://github.com/PythonSouls/Book_to_Tutor.git
-cd Book_to_Tutor
-python -m pip install -r book-to-tutor/requirements.txt
-```
-
-将整个 `book-to-tutor/` 文件夹复制到 agent 的技能目录。例如，Codex 的个人技能目录是 `~/.agents/skills/`，复制后应能找到 `~/.agents/skills/book-to-tutor/SKILL.md`。[Codex 技能目录说明](https://developers.openai.com/codex/skills/)
-
-在聊天中附上你自己的 PDF，发送：
-
-```text
-用 $book-to-tutor 把这本书完整读入我的 Obsidian 库。完成后给我能直接点开的全书入口。
-```
-
-第一次使用时，agent 会问你的库文件夹在哪里。阅读时默认用中文解释，保留英文术语、公式和代码原名。导师给出的原书与演示链接放在相应解释旁边。
-
 ## 每节笔记怎样落到实际工作
 
-以“团队在排查 GPU 打分服务延迟”为例。下面是导师自拟的生产场景，测量结果由实际工作负载决定。
+高峰期推荐打分变慢了。学完矩阵分块这一节，你怎样判断它能不能帮上忙？这页手绘笔记从一次请求出发，最后回到团队需要的交付物：一份能说明应当保留还是更换实现的测量报告。
 
-| 每节回答的六个问题 | 这一节可以怎样学 |
-| --- | --- |
-| ① 生产现场遇到了什么问题？ | 批量打分变慢。先用性能分析工具确认，矩阵乘法 kernel 占了多少时间。 |
-| ② 本节能解决其中哪一部分？ | 检查线程是否反复从全局内存读取同一批输入。 |
-| ③ 机制怎样运作？ | 跟踪一块数据怎样被装进 shared memory，又被多个线程复用。 |
-| ④ 哪些条件重要？ | 谁必须等谁？怎样保证下一轮写入时，本轮的值已经用完？ |
-| ⑤ 哪个例子能让我看懂？ | 回到图 5.9 的代码，再用小矩阵跟踪一个输出元素的两轮乘加。 |
-| ⑥ 回到现场，我能交付什么？ | 用代表性输入比较两种实现的数值结果、显存流量和端到端延迟，给出是否采用分块实现的依据。 |
+[![一次 GPU 延迟排查的手绘工作笔记。左页从请求变慢、定位瓶颈讲到数据复用；右页检查两道同步、跟踪两轮乘加，最后核对正确性、显存流量和端到端延迟。](docs/gpu-field-notes.webp)](docs/field-notes.md)
+
+这是导师自拟的生产场景。图中的“重复读取”是待验证的假设，结论取决于实际测量。[展开手绘页，逐问查看排查思路](docs/field-notes.md)
 
 ## 你的 Obsidian 库里会留下什么
 
